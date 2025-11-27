@@ -107,7 +107,7 @@ uint32_t reading(uint8_t data[]){
 						| (((uint32_t) (data[1] & 0b00001000)) << 22)
 						| (((uint32_t) (data[1] & 0b00100000)) << 21)
 						| (((uint32_t) (data[1] & 0b10000000)) << 20);
-	return raw_reading;
+	return raw_reading^0x800000;
 }
 
 uint32_t ReadHX711(void){
