@@ -33,7 +33,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define AVGSIZE 5
+#define AVGSIZE 50
+#define TARE 0;
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -64,10 +65,10 @@ static void MX_SPI1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-volatile static uint8_t clock[8] =
+const static uint8_t clock[8] =
 { 0b00000000, 0x01, 0b01010101, 0b01010101, 0b01010101, 0b01010101,
   0b01010101, 0b01010101 };  // 25 taktów
-volatile static uint8_t buf[8]={0};
+const volatile static uint8_t buf[8]={0};
 static int hx_transfer_done=1;
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
@@ -76,54 +77,42 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
 }
 
 uint32_t reading(uint8_t data[]){
-	uint32_t raw_reading = (((uint32_t) (data[7] & 0b00000010)) >> 1)
-						| (((uint32_t) (data[7] & 0b00001000)) >> 2)
-						| (((uint32_t) (data[7] & 0b00100000)) >> 3)
-						| (((uint32_t) (data[7] & 0b10000000)) >> 4)
-						| (((uint32_t) (data[6] & 0b00000010)) << 3)
-						| (((uint32_t) (data[6] & 0b00001000)) << 2)
-						| (((uint32_t) (data[6] & 0b00100000)) << 1)
-						| (((uint32_t) (data[6] & 0b10000000)) << 0) |
-
-						  (((uint32_t) (data[5] & 0b00000010)) << 7)
-						| (((uint32_t) (data[5] & 0b00001000)) << 6)
-						| (((uint32_t) (data[5] & 0b00100000)) << 5)
-						| (((uint32_t) (data[5] & 0b10000000)) << 4)
-						| (((uint32_t) (data[4] & 0b00000010)) << 11)
-						| (((uint32_t) (data[4] & 0b00001000)) << 10)
-						| (((uint32_t) (data[4] & 0b00100000)) << 9)
-						| (((uint32_t) (data[4] & 0b10000000)) << 8) |
-
-						  (((uint32_t) (data[3] & 0b00000010)) << 15)
-						| (((uint32_t) (data[3] & 0b00001000)) << 14)
-						| (((uint32_t) (data[3] & 0b00100000)) << 13)
-						| (((uint32_t) (data[3] & 0b10000000)) << 12)
-						| (((uint32_t) (data[2] & 0b00000010)) << 19)
-						| (((uint32_t) (data[2] & 0b00001000)) << 18)
-						| (((uint32_t) (data[2] & 0b00100000)) << 17)
-						| (((uint32_t) (data[2] & 0b10000000)) << 16) |
-
-						  (((uint32_t) (data[1] & 0b00000010)) << 23)
-						| (((uint32_t) (data[1] & 0b00001000)) << 22)
-						| (((uint32_t) (data[1] & 0b00100000)) << 21)
-						| (((uint32_t) (data[1] & 0b10000000)) << 20);
+	uint32_t raw_reading = 0;
+	for(int i=7, j=3; i>=2; i--, j+=8){
+		uint8_t read_data_help=0b00000010;
+		while(read_data_help){	//do momentu utraty przesuwanego bita
+			raw_reading|=(data[i] & read_data_help)<<j--; //
+			read_data_help<<=2;	//przesunie
+		}
+	}
+	raw_reading>>=4;	//dopelnienie do prawej
 	return raw_reading^0x800000;
 }
 
 uint32_t ReadHX711(void){
-		while(HAL_GPIO_ReadPin(MISO_GPIO_Port, MISO_Pin)==GPIO_PIN_SET)
-			;
-		hx_transfer_done = 0;
-	    HAL_SPI_TransmitReceive_DMA(&hspi1, (uint8_t*)clock, (uint8_t*)buf, sizeof(buf));
-	    while(!hx_transfer_done)
-	        ;
-	    uint32_t val = reading((uint8_t*)buf);
-	    return val;
+
+	while(HAL_GPIO_ReadPin(MISO_GPIO_Port, MISO_Pin)==GPIO_PIN_SET)
+		;
+	hx_transfer_done = 0;
+    HAL_SPI_TransmitReceive_DMA(&hspi1, (uint8_t*)clock, (uint8_t*)buf, sizeof(buf));
+    while(!hx_transfer_done)
+        ;
+    uint32_t val = reading((uint8_t*)buf);
+    return val;
 }
 
 int __io_putchar(int ch){
 	HAL_UART_Transmit(&huart2, (uint8_t*)&ch, 1, HAL_MAX_DELAY);
 	return 1;
+}
+
+uint32_t weight(void){
+	uint32_t avg=0;
+	for(int i=0;i<AVGSIZE;i++)
+		avg+=ReadHX711();
+	avg/=AVGSIZE;
+	avg-=TARE;
+	return avg;
 }
 /* USER CODE END 0 */
 
@@ -166,11 +155,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  uint32_t avg=0;
-	  for(int i=0;i<AVGSIZE;i++)
-		  avg+=ReadHX711();
-	  avg/=AVGSIZE;
-	  printf("Waga: %" PRIu32 "\r",avg);
+	  printf("\x1b[2K");
+	  printf("Waga: %" PRIu32 "\r",weight());
 	  fflush(stdout);
     /* USER CODE END WHILE */
 
@@ -326,27 +312,11 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(PD_SCK_GPIO_Port, PD_SCK_Pin, GPIO_PIN_RESET);
-
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PD_SCK_Pin */
-  GPIO_InitStruct.Pin = PD_SCK_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(PD_SCK_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : DOUT_Pin */
-  GPIO_InitStruct.Pin = DOUT_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(DOUT_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
