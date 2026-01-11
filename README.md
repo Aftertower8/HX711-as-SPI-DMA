@@ -2,9 +2,7 @@
 Projekt rekrutacyjny KNR - Odczyt danych z ADC HX711 z wykorzystaniem DMA
 
 # TODO:
-- poprawne uśrednianie wyników,
-- zwiększenie prędkości odczytu danych,
-- kalibracja,
+- kalibracja - ewentualna zmiana z jednego punktu na wiecej,
 - przesyłanie na CAN
 
 # Źródła:

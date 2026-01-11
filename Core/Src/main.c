@@ -78,7 +78,7 @@ int __io_putchar(int ch){
 
 const uint8_t clock[8] =
 { 0b00000000, 0b01010101, 0b01010101, 0b01010101, 0b01010101,
-  0b01010101, 0b01010101, 0b01000000 };  // 25 taktów; clock[0]-bezpieczne opoznienie, clock[7]-gain na 128, reszta cos w stylu bit banging do odbierania danych
+  0b01010101, 0b01010101, 0b01000000 };  // 25 taktów; clock[0]-bezpieczne opoznienie, clock[7]-gain na 128, clock[1..6] - odbieranie danych (rising edge)
 
 volatile uint8_t buf[8]={0};	//bufor do wczytywania danych
 volatile int hx_transfer_done=1;
@@ -105,12 +105,12 @@ int32_t reading(uint8_t data[]){
 		while(read_data_help!=0){	//do momentu uciecia przesuwanego bita
 			raw_reading|=(data[i] & read_data_help)<<mov;	//dolaczanie do odczytu kolejnych odebranych bitow (w kolejnosci od najmniej do najardziej znaczacego)
 			//read_data_help sluzy do wyizolowania co drugiego bita z odczytu data i ustalenia czy wynosi 0 czy 1 (data[i] & read_data_help)
-			//j odpowiada za odpowiednie sklejenie bitow
+			//mov odpowiada za sklejenie odpowiednich bitow
 			mov--;
 			read_data_help<<=2;	//przejscie do kolejnego bita od prawej do lewej
 		}
 	}
-	raw_reading>>=4;	//przesuniecie do prawej
+	raw_reading>>=4;	//dopasowanie do prawej
 	raw_reading^=0x800000;
 	return raw_reading;
 }
@@ -198,7 +198,7 @@ int main(void)
 	  }
 	  read = ready_read(read);
 	  printf("\x1b[2K");
-	  printf("Waga: %.1lf[g]\r",read);	//powinna byc waga w g
+	  printf("Waga: %.1lf[g]\r",read);	//waga w g
 	  fflush(stdout);
     /* USER CODE END WHILE */
 
