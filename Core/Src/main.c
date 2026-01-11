@@ -78,7 +78,8 @@ int __io_putchar(int ch){
 
 const uint8_t clock[8] =
 { 0b00000000, 0b01010101, 0b01010101, 0b01010101, 0b01010101,
-  0b01010101, 0b01010101, 0b01000000 };  // 25 taktów; clock[0]-bezpieczne opoznienie, clock[7]-gain na 128, clock[1..6] - odbieranie danych (rising edge)
+  0b01010101, 0b01010101, 0b01000000 };  // 25 taktów; clock[0]-bezpieczne opoznienie
+//clock[1..6] - odbieranie danych (rising edge), clock[7]-gain na 128
 
 volatile uint8_t buf[8]={0};	//bufor do wczytywania danych
 volatile int hx_transfer_done=1;
@@ -97,22 +98,32 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 	}
 }
 
+union{
+	uint32_t uint32_v;
+	int32_t int32_v;
+} converter;
+
 int32_t reading(uint8_t data[]){
-	int32_t raw_reading = 0;
+	uint32_t raw_reading = 0;
 	for(int i=6, j=3; i>=1; i--, j+=4){
 		uint8_t read_data_help=0b0000001;	//
 		int mov = j; //zmienna pomocnicza mov odpowiadajaca za przesuniecia bitowe
 		while(read_data_help!=0){	//do momentu uciecia przesuwanego bita
-			raw_reading|=(data[i] & read_data_help)<<mov;	//dolaczanie do odczytu kolejnych odebranych bitow (w kolejnosci od najmniej do najardziej znaczacego)
-			//read_data_help sluzy do wyizolowania co drugiego bita z odczytu data i ustalenia czy wynosi 0 czy 1 (data[i] & read_data_help)
+			raw_reading|=(data[i] & read_data_help)<<mov;
+			//dolaczanie do odczytu kolejnych odebranych bitow (w kolejnosci od najmniej do najardziej znaczacego)
+			//read_data_help sluzy do wyizolowania co drugiego bita z odczytu data
+			//i ustalenia czy wynosi 0 czy 1 (data[i] & read_data_help)
 			//mov odpowiada za sklejenie odpowiednich bitow
 			mov--;
 			read_data_help<<=2;	//przejscie do kolejnego bita od prawej do lewej
+
 		}
 	}
 	raw_reading>>=4;	//dopasowanie do prawej
-	raw_reading^=0x800000;
-	return raw_reading;
+	raw_reading<<=8;
+	converter.uint32_v = raw_reading;
+	int32_t signed_read = converter.int32_v>>=8;
+	return signed_read;
 }
 
 int32_t ReadHX711(void){
