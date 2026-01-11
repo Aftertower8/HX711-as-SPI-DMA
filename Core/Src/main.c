@@ -64,26 +64,37 @@ static void MX_SPI1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-static int32_t TARE=0;
-static double SCALE=0;
-static const int AVGSIZE=4;	//przesuniecie bitowe o 2^AVGSIZE
-static const double KNOWN_WEIGHT=18160; //dla 50g
+int32_t TARE=0;
+double SCALE=0;
+const int AVGSIZE=4;	//przesuniecie bitowe o 2^AVGSIZE
+const double KNOWN_WEIGHT=18160; //dla 50g
+volatile uint8_t tare_updating = 0;
+uint8_t uart_val=0;
 
 int __io_putchar(int ch){
 	HAL_UART_Transmit(&huart2, (uint8_t*)&ch, 1, HAL_MAX_DELAY);
 	return 1;
 }
 
-const static uint8_t clock[8] =
+const uint8_t clock[8] =
 { 0b00000000, 0b01010101, 0b01010101, 0b01010101, 0b01010101,
   0b01010101, 0b01010101, 0b01000000 };  // 25 taktów; clock[0]-bezpieczne opoznienie, clock[7]-gain na 128, reszta cos w stylu bit banging do odbierania danych
 
-volatile static uint8_t buf[8]={0};	//bufor do wczytywania danych
-static int hx_transfer_done=1;
+volatile uint8_t buf[8]={0};	//bufor do wczytywania danych
+volatile int hx_transfer_done=1;
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
     if (hspi == &hspi1)
         hx_transfer_done = 1;
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
+	if(huart==&huart2){
+		if(uart_val=='t'){
+			tare_updating=1;
+		}
+		HAL_UART_Receive_IT(&huart2, &uart_val, 1);
+	}
 }
 
 int32_t reading(uint8_t data[]){
@@ -123,18 +134,11 @@ int32_t avg_read(void){
 	return avg;
 }
 
-void uart_tare_weight(double read){
-	uint8_t val;
-	if(HAL_UART_Receive(&huart2, &val, 1, 0)==HAL_OK && val=='t')
-		TARE=read;
-}
-
 void calibrate_weight(){
 	SCALE = KNOWN_WEIGHT/50.0; //ile na 1 gr
 }
 
 double ready_read(double read){
-	uart_tare_weight(read);
 	read-=TARE;
 	read/=SCALE;
 	read=round(read*10.0)/10.0;
@@ -180,13 +184,19 @@ int main(void)
   /* USER CODE BEGIN 2 */
   calibrate_weight();
   TARE=avg_read();
+  HAL_UART_Receive_IT(&huart2, &uart_val, 1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  double read=ready_read((double)avg_read());
+	  double read=(double)avg_read();
+	  if(tare_updating==1){
+		  TARE=(int32_t)read;
+		  tare_updating=0;
+	  }
+	  read = ready_read(read);
 	  printf("\x1b[2K");
 	  printf("Waga: %.1lf[g]\r",read);	//powinna byc waga w g
 	  fflush(stdout);
