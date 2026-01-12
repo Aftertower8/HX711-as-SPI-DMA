@@ -67,7 +67,7 @@ static void MX_SPI1_Init(void);
 int32_t TARE=0;
 double SCALE=0;
 const int AVGSIZE=4;	//przesuniecie bitowe o 2^AVGSIZE
-const double KNOWN_WEIGHT=18160; //dla 50g
+const double KNOWN_WEIGHT=18770; //dla 50g
 volatile uint8_t tare_updating = 0;
 uint8_t uart_val=0;
 
@@ -119,10 +119,10 @@ int32_t reading(uint8_t data[]){
 
 		}
 	}
-	raw_reading>>=4;	//dopasowanie do prawej
-	raw_reading<<=8;
-	converter.uint32_v = raw_reading;
-	int32_t signed_read = converter.int32_v>>=8;
+	raw_reading>>=4;	//dopasowanie do prawej, dla przejrzystosci kodu
+	raw_reading<<=8;	//dopelnienie do lewej aby uwzglednic ewentualny bit znaku
+	converter.uint32_v = raw_reading;	//jesli 32 bit bedzie 1 to converter.int32_t bedzie ujemny
+	int32_t signed_read = converter.int32_v>>=8;	//z powrotem dosuniecie do prawej, zachowujac znak
 	return signed_read;
 }
 
